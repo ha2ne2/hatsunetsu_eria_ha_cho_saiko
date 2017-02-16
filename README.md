@@ -1,6 +1,6 @@
-# res_shower
+# コンパイル方法
 
-FIXME: description
+$ lein uberjar
 
 ## Installation
 

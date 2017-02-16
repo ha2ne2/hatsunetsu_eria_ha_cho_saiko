@@ -31,7 +31,7 @@
 (import 'javax.sound.sampled.DataLine$Info)
 (import 'javax.sound.sampled.SourceDataLine)
 
-(def software-name "res-shower")
+(def software-name "ハツネツエリアは超サイコー")
 (def linux? (<= 0 (.indexOf (System/getProperty "os.name") "Linux")))
 
 (defn play [filepath]
@@ -87,7 +87,7 @@
 (defn count= [n seq] (= n (count seq)))
 
 (def f (frame :title software-name :on-close :exit
-              :icon (clojure.java.io/resource "icon.png")))
+              :icon (clojure.java.io/resource "icon2.png")))
 
 (defn display [content]
   (config! f :content content)
@@ -152,7 +152,7 @@
 (def new-res-list (atom []))
 (def count-down (atom 10))
 (def jimaku-window3 (frame :title "字幕ウィンドウ"
-                           :icon (clojure.java.io/resource "icon.png")))
+                           :icon (clojure.java.io/resource "icon2.png")))
 (def default-jimaku-text (atom ""))
 (def jimaku-text (atom ""))
 
@@ -174,7 +174,7 @@
 
 (def tune-window
   (frame :title "常に表示する文章"
-         :icon (clojure.java.io/resource "icon.png")))
+         :icon (clojure.java.io/resource "icon2.png")))
 (def tune-text
  (text :text "" :multi-line? true :font (seesaw.font/font :name "ＭＳ Ｐゴシック" :size 34)))
 (def tune-panel
@@ -263,7 +263,7 @@
             (config! reload-button :text (str @count-down "/10")
                      :enabled? false)
             ;; <=だとサーバが重い時に連続リロードかかる可能性がある
-            (when (= @count-down 0) 
+            (when (or (= @count-down 0)  (= (mod @count-down 10) 0))
               (future
                 (reload e)
                 (reset! count-down 10)))))

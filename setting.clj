@@ -1,7 +1,7 @@
 {:jimaku-window-size "640x360",
- :jimaku-window-location (800 35),
+ :jimaku-window-location (300 592),
  :main-window-size "379x268",
- :main-window-location (1021 579),
+ :main-window-location (474 604),
  :thread-url
- "http://jbbs.shitaraba.net/bbs/read.cgi/radio/22607/1481284788/",
- :waku? true}
+ "http://jbbs.shitaraba.net/bbs/read.cgi/internet/17144/1483888453/l50",
+ :waku? false}
