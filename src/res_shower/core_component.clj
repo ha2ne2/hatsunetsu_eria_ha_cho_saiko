@@ -123,8 +123,6 @@
    ;; :font (seesaw.font/font :name "ＭＳ Ｐゴシック" :size 12)
    ))
 
-
-
 (def f
   (let [[x y] (setting :main-window-location)
         [width height]

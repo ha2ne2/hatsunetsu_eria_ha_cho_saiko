@@ -10,18 +10,18 @@
                                 AudioSystem DataLine
                                 DataLine$Info SourceDataLine))
   (:use seesaw.core)
-  (:require
-   seesaw.clipboard
-   seesaw.behave
-   seesaw.bind
-   seesaw.icon
-   seesaw.color
-   clojure.pprint
-   [clojure.java.io :as jio]))
+  (:require seesaw.clipboard
+            seesaw.behave
+            seesaw.bind
+            seesaw.icon
+            seesaw.color
+            clojure.pprint
+            [clojure.java.io :as jio]
+            [environ.core :refer [env]]))
 
 (native!)
 
-(def debug true)
+(def debug (env :dev))
 
 (load "core_util")
 
@@ -331,6 +331,7 @@
   (.start save-setting-timer))
 
 
-(-main)
+(when debug (-main))
+
 
 
