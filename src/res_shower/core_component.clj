@@ -104,15 +104,26 @@
                     (Thread/sleep 300)
                     (repaint-jimaku-window3))
                   ))]))
+
+
 (def area
-  (doto (text
-         :text ""
-         :multi-line? true
-         :wrap-lines? true
-         :background "BLACK"
-         :foreground "#0F0"
-         :font (seesaw.font/font :name "ＭＳ Ｐゴシック" :size 12))
-    (.setWrapStyleWord false)))
+  (editor-pane
+   :content-type "text/html"
+   :text ""
+   :listen [:hyperlink
+            (fn [e]
+              (if (= (.getEventType e)
+                     javax.swing.event.HyperlinkEvent$EventType/ACTIVATED)
+                (.browse (Desktop/getDesktop) (.toURI (.getURL e)))))]
+   ;; :multi-line? true
+   ;; :wrap-lines? true
+   :background "BLACK"
+   :editable? false
+   ;; :foreground "GREEN"
+   ;; :font (seesaw.font/font :name "ＭＳ Ｐゴシック" :size 12)
+   ))
+
+
 
 (def f
   (let [[x y] (setting :main-window-location)

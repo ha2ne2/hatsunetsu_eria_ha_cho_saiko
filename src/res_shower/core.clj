@@ -1,18 +1,14 @@
 (ns res-shower.core
   (:gen-class)
-  (:import java.awt.event.InputEvent
-           java.awt.event.MouseEvent
-           java.awt.Toolkit
-           java.awt.MouseInfo
-           java.awt.Color
-           java.awt.AlphaComposite
-           java.awt.Robot
+  (:import (java.awt.event InputEvent MouseEvent)
+           (java.awt Toolkit MouseInfo Desktop
+                     Color AlphaComposite Robot)
            javax.swing.ImageIcon
-           javax.sound.sampled.AudioInputStream
-           javax.sound.sampled.AudioSystem
-           javax.sound.sampled.DataLine
-           javax.sound.sampled.DataLine$Info
-           javax.sound.sampled.SourceDataLine)
+           javax.swing.event.HyperlinkEvent
+           java.net.URI
+           (javax.sound.sampled AudioInputStream
+                                AudioSystem DataLine
+                                DataLine$Info SourceDataLine))
   (:use seesaw.core)
   (:require
    seesaw.clipboard
@@ -56,15 +52,20 @@
         info (drop-last 3 v)
         body (v 4)
         title (v 5)]
-      (str (if (not= "" title)
-             (do (config! f :title (str software-name " " title)) (str title "\n"))
-             "\n") "\n"
-           (apply str (interpose " " info)) "\n"
+      (str (when (not= "" title)
+             (config! f :title (str software-name " " title))
+             (str title "<br>"))
+           "<br>"
+           (apply str (interpose " " info)) "<br>"
            (if (re-find #"包み紙" body)
-             (str "包み紙は綺麗に重ねて直しなさい\n枚数チェックもするわよ")
+             (str "包み紙は綺麗に重ねて直しなさい<br>枚数チェックもするわよ")
              (-> body
-                 (clojure.string/replace #"<br>" "\n")
-                 (clojure.string/replace #"<a.*?>(.*?)</a>" "$1")
+                 ;(clojure.string/replace #"<br>" "\n")
+                 (clojure.string/replace #"(https?://[-_.!~*'()a-zA-Z0-9;/?:@&=+$,%#]+)"
+                                         ;;"(http(s)?://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)?)"
+                                         "<a href=\"$1\">$1</a>")
+                 (clojure.string/replace #"(?<!h)(ttps?://[-_.!~*'()a-zA-Z0-9;/?:@&=+$,%#]+)"
+                                         "<a href=\"h$1\">$1</a>")
                  (clojure.string/replace #"&quot;" "\"")
                  (clojure.string/replace #"&gt;" ">")
                  (clojure.string/replace #"&lt;" "<")
@@ -84,6 +85,8 @@
           (clojure.string/replace #"&#65374;" "～")))))
 
 ;; str -> str
+;; (convert-url-to-dat-url "http://jbbs.shitaraba.net/bbs/read.cgi/internet/17144/1494773060/" )
+;; "http://jbbs.shitaraba.net/bbs/rawmode.cgi/internet/17144/1494773060/"
 (defn convert-url-to-dat-url [url]
   (let [[_ a]
         (re-find #"http://jbbs.shitaraba.net/bbs/read.cgi/(.*)$" url)]
@@ -119,6 +122,22 @@
   (reset! jimaku-text @default-jimaku-text)
   (repaint-jimaku-window3))
 
+(def style
+"<style>
+  body {
+    color: #00FF00;
+    background: #000000;
+    font-family: ＭＳ Ｐゴシック;
+    font-size: 12
+  }
+
+  a {
+    text-decoration: none;
+    color: #40AAFF;
+  }
+</style>")
+
+
 (defn reload [e]
    ;; URLに変更があったかどうか
    (if-let-it (not= @url (it-is (shitaraba-normalize (value url-bar))))
@@ -126,7 +145,10 @@
          (reset! new-res-list nil)
          (reset! url it)
          (invoke-later
-          (text! area (apply str (map format-res @dat)))
+          (text! area (reduce str (concat [(str style "<body>")]
+                                          (interpose "<br>" (map format-res @dat))
+                                          ["</body>"]
+                                          )))
           (scroll! area :to :bottom)))
      (when-let [news (read-thread (str it (inc (count @dat)) "-"))]
        (reset! dat (concat @dat news))
@@ -138,7 +160,10 @@
        (when-not (.isRunning @jimaku-timer)
          (.start @jimaku-timer))
        (invoke-later
-        (text! area (apply str (map format-res @dat)))
+        (text! area (reduce str (concat [(str style "<body>")]
+                                          (interpose "<br>" (map format-res @dat))
+                                          ["</body>"]
+                                          )))
         (scroll! area :to :bottom)))))
 
 (def auto-reload-timer
@@ -147,7 +172,8 @@
             (swap! count-down #(- % 1))
             (config! reload-button :text (str @count-down "/10")
                      :enabled? false)
-            (when (or (= @count-down 0)  (= (mod @count-down 10) 0))
+            ;; 通信失敗時に-10でもリロード
+            (when  (= (mod @count-down 10) 0)
               (future
                 (reload e)
                 (reset! count-down 10)))))
