@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [seesaw "1.4.5"]
                  [environ "1.1.0"]
+                 [clj-http "3.12.0"]
                  ]
   :plugins [[lein-environ "1.1.0"]]
   :resource-paths ["resources"]

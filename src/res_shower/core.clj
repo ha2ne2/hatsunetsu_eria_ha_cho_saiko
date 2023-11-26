@@ -8,7 +8,8 @@
            java.net.URI
            (javax.sound.sampled AudioInputStream
                                 AudioSystem DataLine
-                                DataLine$Info SourceDataLine))
+                                DataLine$Info SourceDataLine)
+            (java.nio.charset Charset StandardCharsets))
   (:use seesaw.core)
   (:require seesaw.clipboard
             seesaw.behave
@@ -17,7 +18,8 @@
             seesaw.color
             clojure.pprint
             [clojure.java.io :as jio]
-            [environ.core :refer [env]]))
+            [environ.core :refer [env]]
+            [clj-http.client :as client]))
 
 (native!)
 
@@ -48,14 +50,34 @@
   (config! f :content content)
   content)
 
+;; HTTPヘッダを使って、差分だけを取得する。
+(def response-info (atom {:size 0 :last-modified nil}))
+(defn send-http-request [url]
+  (let [headers (if-let [last-modified (:last-modified @response-info)]
+                  {"If-Modified-Since" last-modified}
+                  {})
+        range-header (if-let [size (:size @response-info)]
+                       {"Range" (str "bytes=" size "-")}
+                       {})
+        response (client/get url {:headers (merge headers range-header)
+                                 :decode-body-headers true :as :auto})]
+    (let [content-length
+          (try (Integer. (:content-length (:headers response))) (catch NumberFormatException _ nil))]
+      (swap! response-info
+             (fn [info]
+               {:size (+ (:size info) (or content-length 0))
+                :last-modified (or (:last-modified (:headers response)) (:last-modified info))}))
+      (:body response))))
+
+
 ;; str -> str
 ;; (res-to-show (ress 1))
 ;; "891 名無しさん sage 2016/02/27(土) 20:07:29\n「&#65374;」がちゃんと表示されるようにしてください\n\n"
 (defn format-res [res]
   (let [v (clojure.string/split res #"<>" Integer/MAX_VALUE) ; 省略させない
         info (drop-last 3 v)
-        body (v 4)
-        title (v 5)]
+        body (v 3)
+        title (v 4)]
       (str (apply str (interpose " " info)) "<br>"
            (if (re-find #"包み紙" body)
              (str "包み紙は綺麗に重ねて直しなさい<br>枚数チェックもするわよ")
@@ -90,24 +112,30 @@
 ;; (convert-url-to-dat-url "http://jbbs.shitaraba.net/bbs/read.cgi/internet/17144/1494773060/" )
 ;; "http://jbbs.shitaraba.net/bbs/rawmode.cgi/internet/17144/1494773060/"
 (defn convert-url-to-dat-url [url]
-  (let [[_ a]
-        (re-find #"http://jbbs.shitaraba.net/bbs/read.cgi/(.*)$" url)]
-    (str "http://jbbs.shitaraba.net/bbs/rawmode.cgi/" a)))
+  (if-let [[_ a]
+           (re-find #"https://jbbs.shitaraba.net/bbs/read.cgi/(.*)$" url)]
+    (str "https://jbbs.shitaraba.net/bbs/rawmode.cgi/" a)
+    ;; bbs.jpnkn 対応
+    (if-let [[_ name thread-id]
+             (re-find #"https://bbs.jpnkn.com/test/read.cgi/(.*?)/(.*)/$" url)]
+      (str "http://bbs.jpnkn.com/" name "/dat/" thread-id ".dat"))))
 
-;; url -> [res] or nil
+;; Url -> [res] or nil
 (defn read-thread [url]
   (-> url
-       convert-url-to-dat-url
-       (slurp :encoding "EUC-JP")
-       (#(if (empty? %)
-           nil
-           (clojure.string/split-lines %)))))
-
+      convert-url-to-dat-url
+      send-http-request
+      (#(if (empty? %)
+          nil
+          (clojure.string/split-lines %)))))
+  
 ;; (shitaraba-normalize "http://jbbs.shitaraba.net/bbs/read.cgi/internet/17144/1448539337/900-")
 ;; "http://jbbs.shitaraba.net/bbs/read.cgi/internet/17144/1448539337/"
 (defn shitaraba-normalize [url]
-  (let [[_ opt] (re-find #"http://jbbs.shitaraba.net/bbs/read.cgi/(.*/)" url)]
-     (str "http://jbbs.shitaraba.net/bbs/read.cgi/" opt)))
+  (if-let [[_ opt] (re-find #"https://jbbs.shitaraba.net/bbs/read.cgi/(.*/)" url)]
+    (str "https://jbbs.shitaraba.net/bbs/read.cgi/" opt)
+    ;; bbs.jpnkn 対応
+    url))
 
 (defn repaint-jimaku-window3 []
   (if linux?
@@ -162,7 +190,7 @@
 
 (defn reload [e]
    ;; URLに変更があったかどうか
-   (if-let-it (not= @url (it-is (shitaraba-normalize (value url-bar))))
+  (if-let-it (not= @url (it-is (shitaraba-normalize (value url-bar))))
      (do (reset! dat (read-thread it))
          (reset! new-res-list nil)
          (reset! url it)
@@ -172,7 +200,7 @@
                                      (reduce str (map format-res (reverse @dat)))
                                      ["</body>"])))
           (scroll! area :to :top)))
-     (when-let [news (read-thread (str it (inc (count @dat)) "-"))]
+     (when-let [news (read-thread it)]
        (reset! dat (concat @dat news))
        (reset! new-res-list (concat @new-res-list news))
        (.setDelay jimaku-timer
