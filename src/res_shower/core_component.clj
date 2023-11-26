@@ -6,6 +6,27 @@
    :font (seesaw.font/font :name "ＭＳ Ｐゴシック" :size 34)
    :paint draw-string*))
 
+(if linux?
+  (listen jimaku-canvas
+          :mouse-clicked
+          (fn [e]
+            (let [p (.getPoint e)
+                  robot (new java.awt.Robot)
+                  original-size (config jimaku-window3 :size)]
+              (invoke-later 
+               (config! jimaku-window3 :size [10 :by 10])
+               (Thread/sleep 100)
+               (.mousePress robot java.awt.event.InputEvent/BUTTON1_MASK)
+               (if (not= java.awt.event.MouseEvent/BUTTON3 (.getButton e))
+                 (.mouseRelease robot java.awt.event.InputEvent/BUTTON1_MASK))
+               (Thread/sleep 100)
+               (config! jimaku-window3 :size original-size)
+               (.createBufferStrategy jimaku-window3 2)
+               (future 
+                 (Thread/sleep 300)
+                 (repaint-jimaku-window3))
+               )))))
+
 (def initial-click-x (atom 0))
 (def initial-click-y (atom 0))
 
@@ -60,7 +81,7 @@
 
 (def auto-reload-cbox
   (checkbox :text "自動更新"
-            :listen [:action auto-reload-action]))
+            :listen [:action auto-reload-cbox-toggled]))
 
 (def url-bar
   (text :text (empty-or (setting :thread-url)
@@ -115,12 +136,8 @@
               (if (= (.getEventType e)
                      javax.swing.event.HyperlinkEvent$EventType/ACTIVATED)
                 (.browse (Desktop/getDesktop) (.toURI (.getURL e)))))]
-   ;; :multi-line? true
-   ;; :wrap-lines? true
    :background "BLACK"
    :editable? false
-   ;; :foreground "GREEN"
-   ;; :font (seesaw.font/font :name "ＭＳ Ｐゴシック" :size 12)
    ))
 
 (def f
@@ -130,15 +147,16 @@
              (clojure.string/split (setting :main-window-size) #"x"))]
     (doto (frame :title software-name :on-close (if debug :hide :exit)
                  :icon (clojure.java.io/resource "icon2.png")
-                 :content
-                 (border-panel
-                  :north
-                  (horizontal-panel
-                   :items (list tune-button size-cmbox waku-cbox auto-reload-cbox
-                                reload-button url-bar))
-                  :center
-                  (scrollable area)
-                  :vgap 2 :hgap 2 :border 2))
+                 :content (border-panel
+                           :north
+                           (horizontal-panel
+                            :items (list tune-button size-cmbox waku-cbox auto-reload-cbox
+                                         reload-button url-bar))
+                           :center
+                           (scrollable area :hscroll :never)
+                           :vgap 2 :hgap 2 :border 2))
+      ;; (.setUndecorated true)
+      ;; (.setBackground (new java.awt.Color 0 0 0 0))
       (.setLocation (java.awt.Point. x y))
       (.setPreferredSize (java.awt.Dimension. width height)))))
 

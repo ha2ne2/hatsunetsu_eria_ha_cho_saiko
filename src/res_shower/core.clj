@@ -23,6 +23,11 @@
 
 (def debug (env :dev))
 
+;; (when debug
+;;   (when (resolve 'jimaku-timer) (eval '(.stop jimaku-timer)))
+;;   (when (resolve 'save-setting-timer) (eval '(.stop save-setting-timer)))
+;;   (when (resolve 'auto-reload-timer) (eval '(.stop auto-reload-timer))))
+
 (load "core_util")
 
 (declare 
@@ -38,7 +43,6 @@
 (def count-down (atom 10))
 (def default-jimaku-text (atom ""))
 (def jimaku-text (atom ""))
-(def jimaku-timer (atom nil))
 
 (defn display [content]
   (config! f :content content)
@@ -52,24 +56,22 @@
         info (drop-last 3 v)
         body (v 4)
         title (v 5)]
-      (str (when (not= "" title)
-             (config! f :title (str software-name " " title))
-             (str title "<br>"))
-           "<br>"
-           (apply str (interpose " " info)) "<br>"
+      (str (apply str (interpose " " info)) "<br>"
            (if (re-find #"包み紙" body)
              (str "包み紙は綺麗に重ねて直しなさい<br>枚数チェックもするわよ")
              (-> body
-                 ;(clojure.string/replace #"<br>" "\n")
-                 (clojure.string/replace #"(https?://[-_.!~*'()a-zA-Z0-9;/?:@&=+$,%#]+)"
-                                         ;;"(http(s)?://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)?)"
+                 (clojure.string/replace #"(?<!=\")(https?://[-_.!~*'()a-zA-Z0-9;/?:@&=+$,%#]+)"
                                          "<a href=\"$1\">$1</a>")
                  (clojure.string/replace #"(?<!h)(ttps?://[-_.!~*'()a-zA-Z0-9;/?:@&=+$,%#]+)"
                                          "<a href=\"h$1\">$1</a>")
                  (clojure.string/replace #"&quot;" "\"")
                  (clojure.string/replace #"&gt;" ">")
                  (clojure.string/replace #"&lt;" "<")
-                 (clojure.string/replace #"&#65374;" "～"))))))
+                 (clojure.string/replace #"&#65374;" "～")))
+           "<br><br>"
+           (when (not= "" title)
+             (config! f :title (str software-name " " title))
+             (str  "--------------- " title " ---------------<br>")))))
 
 (defn format-res-for-jimaku [res]
   (let [v (clojure.string/split res #"<>" Integer/MAX_VALUE) ; 省略させない
@@ -78,10 +80,10 @@
       (str "包み紙は綺麗に重ねて直しなさい\n枚数チェックもするわよ")
       (-> body
           (clojure.string/replace #"<br>" "\n")
-          (clojure.string/replace #"<a.*?>(.*?)</a>" "$1")
           (clojure.string/replace #"&quot;" "\"")
           (clojure.string/replace #"&gt;" ">")
           (clojure.string/replace #"&lt;" "<")
+          (clojure.string/replace #"<.*?>" "")
           (clojure.string/replace #"&#65374;" "～")))))
 
 ;; str -> str
@@ -122,6 +124,26 @@
   (reset! jimaku-text @default-jimaku-text)
   (repaint-jimaku-window3))
 
+(def jimaku-timer
+  (timer (fn [e]
+           (invoke-later
+            (if (empty? @new-res-list)
+              (do (reset! jimaku-text @default-jimaku-text)
+                  (repaint-jimaku-window3)
+                  (.stop jimaku-timer))
+              (do (async-play "new_res.wav")
+                  (reset! jimaku-text (format-res-for-jimaku (first @new-res-list)))
+                  (repaint-jimaku-window3)
+                  (swap! new-res-list rest)))))
+         :delay 5000 
+         :start? nil))
+
+;; (timer (fn[e] (async-play "new_res.wav"))
+;;        :delay 3000
+;;        :start? true)
+
+
+
 (def style
 "<style>
   body {
@@ -145,33 +167,30 @@
          (reset! new-res-list nil)
          (reset! url it)
          (invoke-later
-          (text! area (reduce str (concat [(str style "<body>")]
-                                          (interpose "<br>" (map format-res @dat))
-                                          ["</body>"]
-                                          )))
-          (scroll! area :to :bottom)))
+          (text! area
+                 (reduce str (concat [(str style "<body>")]
+                                     (reduce str (map format-res (reverse @dat)))
+                                     ["</body>"])))
+          (scroll! area :to :top)))
      (when-let [news (read-thread (str it (inc (count @dat)) "-"))]
        (reset! dat (concat @dat news))
        (reset! new-res-list (concat @new-res-list news))
-       (.setDelay @jimaku-timer
+       (.setDelay jimaku-timer
                   (if (<= 3 (count @new-res-list))
                     (max (int (/ 10000 (count @new-res-list))) 1000)
                     5000))
-       (when-not (.isRunning @jimaku-timer)
-         (.start @jimaku-timer))
+       (when-not (.isRunning jimaku-timer) (.start jimaku-timer))
        (invoke-later
         (text! area (reduce str (concat [(str style "<body>")]
-                                          (interpose "<br>" (map format-res @dat))
-                                          ["</body>"]
-                                          )))
-        (scroll! area :to :bottom)))))
+                                          (reduce str (map format-res (reverse @dat)))
+                                          ["</body>"])))
+        (scroll! area :to :top)))))
 
 (def auto-reload-timer
   (timer (fn [e]
            (invoke-later
             (swap! count-down #(- % 1))
-            (config! reload-button :text (str @count-down "/10")
-                     :enabled? false)
+            (config! reload-button :text (str @count-down "/10"))
             ;; 通信失敗時に-10でもリロード
             (when  (= (mod @count-down 10) 0)
               (future
@@ -181,9 +200,10 @@
          :delay         1000
          :start? nil))
 
-(defn auto-reload-action [e]
+(defn auto-reload-cbox-toggled [e]
   (if (value auto-reload-cbox)
     (do (reset! count-down 10)
+        (config! reload-button :text (str @count-down "/10") :enabled? false)
         (.start auto-reload-timer))
     (do (config! reload-button :text "更新" :enabled? true)
         (.stop auto-reload-timer))))
@@ -227,70 +247,6 @@
       (doseq [[i line] lines-with-i]
         (.drawString g line x (+ y (* i font-height)))))))
 
-(if linux?
-  (listen jimaku-canvas
-          :mouse-clicked
-          (fn [e]
-            (let [p (.getPoint e)
-                  robot (new java.awt.Robot)
-                  original-size (config jimaku-window3 :size)]
-              (invoke-later 
-               (config! jimaku-window3 :size [10 :by 10])
-               (Thread/sleep 100)
-               (.mousePress robot java.awt.event.InputEvent/BUTTON1_MASK)
-               (if (not= java.awt.event.MouseEvent/BUTTON3 (.getButton e))
-                 (.mouseRelease robot java.awt.event.InputEvent/BUTTON1_MASK))
-               (Thread/sleep 100)
-               (config! jimaku-window3 :size original-size)
-               (.createBufferStrategy jimaku-window3 2)
-               (future 
-                 (Thread/sleep 300)
-                 (repaint-jimaku-window3))
-               )))))
-
-(defn canvas-gen [s]
-  (canvas
-   :background (seesaw.color/color 0 0 0 0)
-   :font (seesaw.font/font :size 34)
-   :paint (fn [c g]
-            (let [lines (map-indexed #(list (inc %) %2)
-                                     (clojure.string/split-lines s))
-                  x 0 y 0
-                  metrics (. g getFontMetrics)
-                  font-height (. metrics getHeight)]
-              (.setColor g java.awt.Color/white)
-              (try (doseq [dx [-2 2 0] dy [-2 2 0]]
-                     (if (count= 1 lines)
-                       (.drawString g s
-                                    (int (+ (/ (- (.getWidth c) (.stringWidth metrics s))
-                                               2) dx))
-                                    (+ y dy font-height))
-                       (doseq [[i line] lines]
-                         (.drawString g line (+ x dx) (+ y dy (* i font-height))))))
-                   (catch Exception e (prn e)))
-              (.setColor g java.awt.Color/blue)
-              (if (count= 1 lines)
-                (.drawString g s
-                             (int (/ (- (.getWidth c) (.stringWidth metrics s)) 2))
-                             (+ y font-height))
-                (doseq [[i line] lines]
-                  (.drawString g line x (+ y (* i font-height)))))))))
-
-(reset!
- jimaku-timer
- (timer (fn [e]
-          (invoke-later
-           (if (empty? @new-res-list)
-             (do (reset! jimaku-text @default-jimaku-text)
-                 (repaint-jimaku-window3)
-                 (.stop @jimaku-timer))
-             (do (async-play "new_res.wav")
-                 (reset! jimaku-text (format-res-for-jimaku (first @new-res-list)))
-                 (repaint-jimaku-window3)
-                 (swap! new-res-list rest)))))
-        :delay 5000 
-        :start? nil))
-
 (def save-setting-timer
   (timer (fn [e]
            (spit
@@ -320,7 +276,6 @@
           :waku? true})))
   
 (load "core_component")
-
 (defn -main
   [& args]
   (selection! waku-cbox (setting :waku?))
