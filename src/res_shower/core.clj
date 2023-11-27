@@ -45,6 +45,7 @@
 (def count-down (atom 10))
 (def default-jimaku-text (atom ""))
 (def jimaku-text (atom ""))
+(def font-size (atom 12))
 
 (defn display [content]
   (config! f :content content)
@@ -73,12 +74,12 @@
 ;; str -> str
 ;; (res-to-show (ress 1))
 ;; "891 名無しさん sage 2016/02/27(土) 20:07:29\n「&#65374;」がちゃんと表示されるようにしてください\n\n"
-(defn format-res [res]
+(defn format-res [i res]
   (let [v (clojure.string/split res #"<>" Integer/MAX_VALUE) ; 省略させない
         info (drop-last 3 v)
         body (v 3)
         title (v 4)]
-      (str (apply str (interpose " " info)) "<br>"
+      (str (inc i) " " (apply str (interpose " " info)) "<br>"
            (if (re-find #"包み紙" body)
              (str "包み紙は綺麗に重ねて直しなさい<br>枚数チェックもするわよ")
              (-> body
@@ -97,7 +98,7 @@
 
 (defn format-res-for-jimaku [res]
   (let [v (clojure.string/split res #"<>" Integer/MAX_VALUE) ; 省略させない
-        body (v 4)]
+        body (v 3)]
     (if (re-find #"包み紙" body)
       (str "包み紙は綺麗に重ねて直しなさい\n枚数チェックもするわよ")
       (-> body
@@ -117,7 +118,7 @@
     (str "https://jbbs.shitaraba.net/bbs/rawmode.cgi/" a)
     ;; bbs.jpnkn 対応
     (if-let [[_ name thread-id]
-             (re-find #"https://bbs.jpnkn.com/test/read.cgi/(.*?)/(.*)/$" url)]
+             (re-find #"https://bbs.jpnkn.com/test/read.cgi/(.*?)/(.*)/" url)]
       (str "http://bbs.jpnkn.com/" name "/dat/" thread-id ".dat"))))
 
 ;; Url -> [res] or nil
@@ -171,22 +172,22 @@
 ;;        :start? true)
 
 
+(defn create-html-style [font-size]
+  (format
+   "<style>
+body {
+  color: #00FF00;
+  background: #000000;
+  font-family: 'ＭＳ Ｐゴシック';
+  font-size: %s;
+}
 
-(def style
-"<style>
-  body {
-    color: #00FF00;
-    background: #000000;
-    font-family: ＭＳ Ｐゴシック;
-    font-size: 12
-  }
-
-  a {
-    text-decoration: none;
-    color: #40AAFF;
-  }
-</style>")
-
+a {
+  text-decoration: none;
+  color: #40AAFF;
+}
+</style>"
+   font-size))
 
 (defn reload [e]
    ;; URLに変更があったかどうか
@@ -196,8 +197,8 @@
          (reset! url it)
          (invoke-later
           (text! area
-                 (reduce str (concat [(str style "<body>")]
-                                     (reduce str (map format-res (reverse @dat)))
+                 (reduce str (concat [(str (create-html-style @font-size) "<body>")]
+                                     (reduce str (reverse (map-indexed format-res @dat)))
                                      ["</body>"])))
           (scroll! area :to :top)))
      (when-let [news (read-thread it)]
@@ -209,8 +210,8 @@
                     5000))
        (when-not (.isRunning jimaku-timer) (.start jimaku-timer))
        (invoke-later
-        (text! area (reduce str (concat [(str style "<body>")]
-                                          (reduce str (map format-res (reverse @dat)))
+        (text! area (reduce str (concat [(str (create-html-style @font-size) "<body>")]
+                                          (reduce str (reverse (map-indexed format-res @dat)))
                                           ["</body>"])))
         (scroll! area :to :top)))))
 

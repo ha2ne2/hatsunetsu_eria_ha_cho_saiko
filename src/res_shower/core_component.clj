@@ -7,6 +7,8 @@
    :paint draw-string*))
 
 (if linux?
+  ;; Linuxだと字幕ウィンドウ内のクリックが透過されないため、
+  ;; 100msウィンドウを消し同じ箇所をクリックさせる
   (listen jimaku-canvas
           :mouse-clicked
           (fn [e]
@@ -140,6 +142,22 @@
    :editable? false
    ))
 
+(def scrollable-area (scrollable area :hscroll :never))
+
+;; ctrl+マウスホイールでフォントサイズを変更
+(listen scrollable-area :mouse-wheel
+        (fn [e]
+          (when (.isControlDown e)
+            (let [wheel-rotation (.getWheelRotation e)
+                  new-font-size (+ @font-size (* -4 wheel-rotation))]
+              (reset! font-size new-font-size)
+              (invoke-later
+               (text! area
+                      (reduce str (concat [(str (create-html-style @font-size) "<body>")]
+                                          (reduce str (reverse (map-indexed format-res @dat)))
+                                          ["</body>"])))
+               (scroll! area :to :top))))))
+
 (def f
   (let [[x y] (setting :main-window-location)
         [width height]
@@ -153,7 +171,7 @@
                             :items (list tune-button size-cmbox waku-cbox auto-reload-cbox
                                          reload-button url-bar))
                            :center
-                           (scrollable area :hscroll :never)
+                           scrollable-area
                            :vgap 2 :hgap 2 :border 2))
       ;; (.setUndecorated true)
       ;; (.setBackground (new java.awt.Color 0 0 0 0))
