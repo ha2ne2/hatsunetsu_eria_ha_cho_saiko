@@ -54,14 +54,21 @@
 ;; HTTPヘッダを使って、差分だけを取得する。
 (def response-info (atom {:size 0 :last-modified nil}))
 (defn send-http-request [url]
-  (let [headers (if-let [last-modified (:last-modified @response-info)]
+  (let [base-headers {"Accept-Encoding" "Identity"}
+        last-modified (if-let [last-modified (:last-modified @response-info)]
                   {"If-Modified-Since" last-modified}
                   {})
         range-header (if-let [size (:size @response-info)]
                        {"Range" (str "bytes=" size "-")}
                        {})
-        response (client/get url {:headers (merge headers range-header)
-                                 :decode-body-headers true :as :auto})]
+        response (client/get url {:headers (merge base-headers last-modified range-header)
+                              :decompress-body false ;; Accept-Encodingの上書きを防ぐ
+                              :decode-body-headers true :as :auto})]
+    (println "body   : " (:body response))
+    (println "headers: " (merge base-headers last-modified range-header))
+    (println "url    : " url)
+    (println "res hdr: " (:headers response))
+
     (let [content-length
           (try (Integer. (:content-length (:headers response))) (catch NumberFormatException _ nil))]
       (swap! response-info
